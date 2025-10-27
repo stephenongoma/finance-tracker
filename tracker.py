@@ -1,31 +1,16 @@
 # tracker.py
 # Author: Stephen Ongoma
 # Finance Tracker v2.1 - Budget Goals and Alerts
-
-import sqlite3
 from datetime import datetime
-
-# Connect to database
-conn = sqlite3.connect('finance.db')
-cursor = conn.cursor()
-
-# Ensure transactions table exists
-cursor.execute('''CREATE TABLE IF NOT EXISTS transactions (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    date TEXT,
-                    category TEXT,
-                    description TEXT,
-                    amount REAL,
-                    type TEXT DEFAULT 'expense'
-                )''')
-
-# Ensure budget table exists
-cursor.execute('''CREATE TABLE IF NOT EXISTS budget (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    month TEXT,
-                    amount REAL
-                )''')
-conn.commit()
+from database import (
+    add_transaction as db_add_transaction,
+    get_summary,
+    get_all_transactions,
+    set_monthly_budget,
+    check_monthly_budget,
+    create_table,
+    create_budget_table
+)
 
 def add_transaction():
     """Add an income or expense record."""
@@ -35,19 +20,15 @@ def add_transaction():
         print("❌ Invalid type. Must be 'income' or 'expense'.")
         return
 
-    category = input("Enter category (e.g. food, rent, salary): ").strip()
-    description = input("Enter description: ").strip()
+    category = input("Enter category (e.g., Food, Rent, Salary): ").strip()
     try:
         amount = float(input("Enter amount (Ksh): "))
     except ValueError:
         print("❌ Please enter a valid number for amount.")
         return
 
-    date = datetime.now().strftime("%Y-%m-%d")
-    cursor.execute("INSERT INTO transactions (date, category, description, amount, type) VALUES (?, ?, ?, ?, ?)",
-                   (date, category, description, amount, trans_type))
-    conn.commit()
-
+    # Using the function from database.py
+    db_add_transaction(trans_type, category, amount)
     print(f"✅ {trans_type.capitalize()} added successfully!")
 
 def set_budget():
@@ -59,63 +40,43 @@ def set_budget():
         print("❌ Invalid number.")
         return
 
-    cursor.execute("DELETE FROM budget WHERE month=?", (month,))
-    cursor.execute("INSERT INTO budget (month, amount) VALUES (?, ?)", (month, amount))
-    conn.commit()
+    set_monthly_budget(month, amount)
     print(f"✅ Budget set for {month}: Ksh {amount:,.2f}")
 
 def check_budget():
     """Check spending against the monthly budget."""
-    month = datetime.now().strftime("%Y-%m")
-
-    cursor.execute("SELECT amount FROM budget WHERE month=?", (month,))
-    row = cursor.fetchone()
-    if not row:
-        return None
-
-    budget = row[0]
-
-    cursor.execute("SELECT SUM(amount) FROM transactions WHERE type='expense' AND date LIKE ?", (f"{month}%",))
-    total_expense = cursor.fetchone()[0] or 0.0
-
-    percent_used = (total_expense / budget) * 100 if budget > 0 else 0
-    remaining = budget - total_expense
-
-    if total_expense >= budget:
-        print(f"⚠️   ALERT: You've exceeded your budget of Ksh {budget:,.2f} by Ksh {abs(remaining):,.2f}!")
-    else:
-        print(f"💰   You’ve used {percent_used:.1f}% of your budget. Remaining: Ksh {remaining:,.2f}")
+    budget_status = check_monthly_budget()
+    if budget_status:
+        if budget_status["is_exceeded"]:
+            print(f"⚠️   ALERT: You've exceeded your budget of Ksh {budget_status['budget']:,.2f} by Ksh {abs(budget_status['remaining']):,.2f}!")
+        else:
+            print(f"💰   You’ve used {budget_status['percent_used']:.1f}% of your budget. Remaining: Ksh {budget_status['remaining']:,.2f}")
 
 def view_summary():
     """Display income, expenses, balance, and budget alert."""
-    cursor.execute("SELECT SUM(amount) FROM transactions WHERE type='income'")
-    total_income = cursor.fetchone()[0] or 0.0
-
-    cursor.execute("SELECT SUM(amount) FROM transactions WHERE type='expense'")
-    total_expense = cursor.fetchone()[0] or 0.0
-
+    total_income, total_expense, _ = get_summary()
     balance = total_income - total_expense
 
     print("\n===== Financial Summary =====")
     print(f"Total Income : Ksh {total_income:,.2f}")
     print(f"Total Expense: Ksh {total_expense:,.2f}")
     print(f"Current Balance: Ksh {balance:,.2f}")
-    print("=============================")
+    print("-----------------------------")
 
     check_budget()
-    print()
+    print("=============================\n")
 
 def view_all():
     """Display all transactions."""
     print("\n--- All Transactions ---")
-    cursor.execute("SELECT date, category, description, amount, type FROM transactions ORDER BY date DESC")
-    records = cursor.fetchall()
+    records = get_all_transactions()
     if not records:
         print("No transactions found.")
         return
 
-    for date, category, desc, amount, t_type in records:
-        print(f"{date} | {category} | {desc} | {t_type.capitalize()} | Ksh {amount:,.2f}")
+    # Assuming get_all_transactions returns (date, category, amount, type)
+    for date, category, amount, t_type in records:
+        print(f"{date.split(' ')[0]} | {category:<15} | {t_type.capitalize():<8} | Ksh {amount:,.2f}")
 
 def main():
     """Main program menu."""
@@ -143,7 +104,8 @@ def main():
         else:
             print("❌ Invalid choice, try again.")
 
-    conn.close()
-
 if __name__ == "__main__":
+    # Ensure all tables exist on startup
+    create_table()
+    create_budget_table()
     main()

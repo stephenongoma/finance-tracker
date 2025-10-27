@@ -43,6 +43,24 @@ def create_table():
     conn.commit()
     conn.close()
 
+def create_budget_table():
+    """
+    Create a table named 'budget' if it doesn't already exist.
+    Each record stores:
+    - month: The month in 'YYYY-MM' format
+    - amount: The budgeted amount for that month
+    """
+    conn = connect()
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS budget (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            month TEXT UNIQUE NOT NULL,
+            amount REAL NOT NULL
+        )
+    """)
+    conn.commit()
+    conn.close()
 
 def add_transaction(transaction_type, category, amount):
     """
@@ -111,3 +129,65 @@ def get_expenses_by_category():
     conn.close()
 
     return results
+
+def get_all_transactions():
+    """
+    Fetch all transactions, ordered by date descending.
+    Returns:
+        List of tuples [(date, category, amount, type), ...]
+    """
+    conn = connect()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT date, category, amount, type
+        FROM transactions
+        ORDER BY date DESC
+    """)
+    results = cursor.fetchall()
+    conn.close()
+    return results
+
+def set_monthly_budget(month, amount):
+    """
+    Set or update the budget for a given month ('YYYY-MM').
+    """
+    conn = connect()
+    cursor = conn.cursor()
+    # Use INSERT OR REPLACE to handle both new and existing budget months
+    cursor.execute("""
+        INSERT OR REPLACE INTO budget (month, amount)
+        VALUES (?, ?)
+    """, (month, amount))
+    conn.commit()
+    conn.close()
+
+def check_monthly_budget():
+    """
+    Check current month's spending against its budget.
+    Returns:
+        A dictionary with budget status or None if no budget is set.
+    """
+    month = datetime.now().strftime("%Y-%m")
+    conn = connect()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT amount FROM budget WHERE month=?", (month,))
+    budget_row = cursor.fetchone()
+    if not budget_row:
+        conn.close()
+        return None  # No budget set for this month
+
+    budget = budget_row[0]
+
+    cursor.execute("SELECT SUM(amount) FROM transactions WHERE type='expense' AND date LIKE ?", (f"{month}%",))
+    total_expense = cursor.fetchone()[0] or 0.0
+    conn.close()
+
+    percent_used = (total_expense / budget) * 100 if budget > 0 else 0
+    return {
+        "budget": budget,
+        "spent": total_expense,
+        "remaining": budget - total_expense,
+        "percent_used": percent_used,
+        "is_exceeded": total_expense >= budget
+    }
