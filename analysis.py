@@ -1,11 +1,11 @@
 # analysis.py
 # Author: Stephen Ongoma
-# Finance Tracker v2.3 - Data Analysis and Export Module
+# Finance Tracker v3.0 - Smart Insights and Analytics
 # ---------------------------------------------------------------
 # Features:
 # - Load and summarize financial data
-# - Visualize income vs expense and spending by category
-# - Export data to CSV for external analysis
+# - Smart insights (top categories, daily avg, savings trend)
+# - Visualizations and CSV export
 # ---------------------------------------------------------------
 
 import sqlite3
@@ -14,11 +14,9 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 import os
 
-# Database path
+# Database path and export folder
 DB_PATH = "finance.db"
 EXPORT_DIR = "data"
-
-# Ensure export directory exists
 os.makedirs(EXPORT_DIR, exist_ok=True)
 
 def load_data():
@@ -31,6 +29,65 @@ def load_data():
     df['date'] = pd.to_datetime(df['date'], errors='coerce')
     return df
 
+# 🧠 NEW: Generate Smart Insights
+def generate_insights(df):
+    """Provide key insights like top categories, daily average, and savings trends."""
+    if df.empty:
+        print("⚠️ No data available for insights.")
+        return
+
+    # Current month filter
+    now = datetime.now()
+    this_month = df[df['date'].dt.month == now.month]
+
+    if this_month.empty:
+        print("\n📅 No transactions for this month yet.")
+        return
+
+    # Basic stats
+    income = this_month.loc[this_month['type'] == 'income', 'amount'].sum()
+    expense = this_month.loc[this_month['type'] == 'expense', 'amount'].sum()
+    balance = income - expense
+    avg_daily_expense = this_month.loc[this_month['type'] == 'expense', 'amount'].sum() / max(1, this_month['date'].dt.day.nunique())
+
+    # Top 3 categories
+    top_categories = (
+        this_month[this_month['type'] == 'expense']
+        .groupby('category')['amount']
+        .sum()
+        .sort_values(ascending=False)
+        .head(3)
+    )
+
+    # Compare with last month (if data available)
+    last_month_num = now.month - 1 if now.month > 1 else 12
+    last_month = df[df['date'].dt.month == last_month_num]
+    if not last_month.empty:
+        last_income = last_month.loc[last_month['type'] == 'income', 'amount'].sum()
+        last_expense = last_month.loc[last_month['type'] == 'expense', 'amount'].sum()
+        savings_change = ((balance - (last_income - last_expense)) / max(1, (last_income - last_expense))) * 100
+    else:
+        savings_change = None
+
+    print("\n===== 💡 SMART FINANCIAL INSIGHTS =====")
+    print(f"📆 Month: {now.strftime('%B %Y')}")
+    print(f"💰 Total Income: Ksh {income:,.2f}")
+    print(f"💸 Total Expense: Ksh {expense:,.2f}")
+    print(f"🪙 Balance: Ksh {balance:,.2f}")
+    print(f"📊 Average Daily Spending: Ksh {avg_daily_expense:,.2f}")
+
+    print("\n🏆 Top 3 Spending Categories:")
+    for category, amount in top_categories.items():
+        print(f"   - {category}: Ksh {amount:,.2f}")
+
+    if savings_change is not None:
+        trend = "increased" if savings_change > 0 else "decreased"
+        print(f"\n📈 Savings have {trend} by {abs(savings_change):.1f}% compared to last month.")
+    else:
+        print("\n📈 No previous month data available for comparison.")
+
+    print("========================================\n")
+
 def summarize_data(df):
     """Generate and print basic financial summaries."""
     total_income = df.loc[df['type'] == 'income', 'amount'].sum()
@@ -41,10 +98,6 @@ def summarize_data(df):
     print(f"Total Income : Ksh {total_income:,.2f}")
     print(f"Total Expense: Ksh {total_expense:,.2f}")
     print(f"Balance      : Ksh {balance:,.2f}")
-
-    if not df[df['type'] == 'expense'].empty:
-        top_category = df[df['type'] == 'expense'].groupby('category')['amount'].sum().idxmax()
-        print(f"Highest Spending Category: {top_category}")
     print("=============================\n")
 
 def plot_income_vs_expense(df):
@@ -81,10 +134,8 @@ def export_to_csv(df):
         print("⚠️ No data available to export.")
         return
 
-    # Create a timestamped filename
     filename = f"transactions_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
     filepath = os.path.join(EXPORT_DIR, filename)
-
     df.to_csv(filepath, index=False)
     print(f"✅ Data exported successfully to: {filepath}")
 
@@ -97,6 +148,7 @@ def main():
         return
 
     summarize_data(df)
+    generate_insights(df)  # 🧠 show insights immediately
 
     while True:
         print("\n--- Analysis Menu ---")
