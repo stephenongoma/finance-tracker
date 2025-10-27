@@ -1,29 +1,31 @@
 # report_generator.py
 # Author: Stephen Ongoma
-# Finance Tracker v3.5 - Monthly PDF Report Generator
+# Finance Tracker v3.1 - Monthly PDF Report Generator
 # ---------------------------------------------------------------
-# Generates a professional monthly financial report
-# Includes summaries, insights, and charts
+# This script generates a professional monthly finance report as a PDF.
+# It includes:
+# - Income, Expense, and Balance Summary
+# - Top 3 Expense Categories
+# - Monthly Spending Chart
 # ---------------------------------------------------------------
 
 import sqlite3
 import pandas as pd
-import matplotlib.pyplot as plt
 from datetime import datetime
 import os
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
+import matplotlib.pyplot as plt
 
+# Paths
 DB_PATH = "finance.db"
-REPORTS_DIR = "data"
-
-# Ensure data folder exists
-os.makedirs(REPORTS_DIR, exist_ok=True)
+EXPORT_DIR = "data"
+os.makedirs(EXPORT_DIR, exist_ok=True)
 
 def load_data():
-    """Load all transactions from the SQLite database."""
+    """Load all transactions from the SQLite database into a pandas DataFrame."""
     conn = sqlite3.connect(DB_PATH)
     query = "SELECT date, category, description, amount, type FROM transactions"
     df = pd.read_sql_query(query, conn)
@@ -31,49 +33,11 @@ def load_data():
     df['date'] = pd.to_datetime(df['date'], errors='coerce')
     return df
 
-def generate_charts(df, month_str):
-    """Generate charts for the PDF report."""
-    df['month'] = df['date'].dt.to_period('M')
-
-    # Bar chart: Monthly income vs expense
-    monthly_summary = df.groupby(['month', 'type'])['amount'].sum().unstack(fill_value=0)
-    plt.figure(figsize=(6, 4))
-    monthly_summary.plot(kind='bar')
-    plt.title("Monthly Income vs Expense")
-    plt.xlabel("Month")
-    plt.ylabel("Amount (Ksh)")
-    plt.tight_layout()
-    bar_chart_path = os.path.join(REPORTS_DIR, f"income_expense_chart_{month_str}.png")
-    plt.savefig(bar_chart_path)
-    plt.close()
-
-    # Pie chart: Expense by category
-    expense_df = df[df['type'] == 'expense']
-    pie_chart_path = None
-    if not expense_df.empty:
-        category_sum = expense_df.groupby('category')['amount'].sum()
-        plt.figure(figsize=(5, 5))
-        plt.pie(category_sum, labels=category_sum.index, autopct='%1.1f%%', startangle=90)
-        plt.title("Expense Distribution by Category")
-        pie_chart_path = os.path.join(REPORTS_DIR, f"expense_pie_chart_{month_str}.png")
-        plt.savefig(pie_chart_path)
-        plt.close()
-
-    return bar_chart_path, pie_chart_path
-
-def generate_pdf(df):
-    """Generate a professional monthly financial report."""
+def generate_monthly_summary(df):
+    """Generate summary statistics for the current month."""
     now = datetime.now()
-    month_str = now.strftime("%B_%Y")
-    report_path = os.path.join(REPORTS_DIR, f"monthly_report_{month_str}.pdf")
-
-    # Filter current month data
     this_month = df[df['date'].dt.month == now.month]
-    if this_month.empty:
-        print("⚠️ No transactions for this month. Report not created.")
-        return
 
-    # Summary
     total_income = this_month.loc[this_month['type'] == 'income', 'amount'].sum()
     total_expense = this_month.loc[this_month['type'] == 'expense', 'amount'].sum()
     balance = total_income - total_expense
@@ -86,43 +50,72 @@ def generate_pdf(df):
         .head(3)
     )
 
-    # Generate charts
-    bar_chart, pie_chart = generate_charts(df, month_str)
+    summary = {
+        "month": now.strftime("%B %Y"),
+        "total_income": total_income,
+        "total_expense": total_expense,
+        "balance": balance,
+        "top_categories": top_categories
+    }
+    return summary, this_month
 
-    # --- PDF Layout ---
-    doc = SimpleDocTemplate(report_path, pagesize=A4)
+def plot_monthly_chart(df, filename):
+    """Plot income vs expense chart for the month."""
+    df['day'] = df['date'].dt.day
+    daily_summary = df.groupby(['day', 'type'])['amount'].sum().unstack(fill_value=0)
+
+    plt.figure(figsize=(8, 4))
+    daily_summary.plot(kind='bar', stacked=True)
+    plt.title("Daily Income vs Expense")
+    plt.xlabel("Day of Month")
+    plt.ylabel("Amount (Ksh)")
+    plt.legend(title="Type")
+    plt.grid(axis='y', linestyle='--', alpha=0.6)
+    plt.tight_layout()
+    chart_path = os.path.join(EXPORT_DIR, filename)
+    plt.savefig(chart_path)
+    plt.close()
+    return chart_path
+
+def generate_pdf_report(summary, chart_path):
+    """Create the PDF report with all details."""
+    filename = f"Finance_Report_{summary['month'].replace(' ', '_')}.pdf"
+    filepath = os.path.join(EXPORT_DIR, filename)
+
+    doc = SimpleDocTemplate(filepath, pagesize=A4)
     styles = getSampleStyleSheet()
     elements = []
 
     # Header
-    elements.append(Paragraph("<b>Finance Tracker Monthly Report</b>", styles['Title']))
-    elements.append(Paragraph(f"Report Date: {now.strftime('%B %d, %Y')}", styles['Normal']))
+    elements.append(Paragraph("<b>Finance Tracker Monthly Report</b>", styles["Title"]))
+    elements.append(Spacer(1, 12))
+    elements.append(Paragraph(f"<b>Report Period:</b> {summary['month']}", styles["Normal"]))
+    elements.append(Paragraph(f"<b>Generated on:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", styles["Normal"]))
     elements.append(Spacer(1, 12))
 
-    # Summary
-    summary_data = [
-        ["Total Income", f"Ksh {total_income:,.2f}"],
-        ["Total Expense", f"Ksh {total_expense:,.2f}"],
-        ["Balance", f"Ksh {balance:,.2f}"],
+    # Summary Table
+    data = [
+        ["Total Income (Ksh)", f"{summary['total_income']:,.2f}"],
+        ["Total Expense (Ksh)", f"{summary['total_expense']:,.2f}"],
+        ["Balance (Ksh)", f"{summary['balance']:,.2f}"]
     ]
-    summary_table = Table(summary_data, colWidths=[200, 200])
-    summary_table.setStyle(TableStyle([
+    table = Table(data, hAlign="LEFT")
+    table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+        ("TEXTCOLOR", (0, 0), (-1, -1), colors.black),
+        ("ALIGN", (0, 0), (-1, -1), "LEFT"),
         ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
     ]))
-    elements.append(summary_table)
-    elements.append(Spacer(1, 12))
+    elements.append(table)
+    elements.append(Spacer(1, 20))
 
-    # Top categories
-    elements.append(Paragraph("<b>Top 3 Spending Categories</b>", styles['Heading2']))
-    if top_categories.empty:
-        elements.append(Paragraph("No expenses recorded this month.", styles['Normal']))
+    # Top 3 categories
+    elements.append(Paragraph("<b>Top 3 Spending Categories</b>", styles["Heading3"]))
+    if summary['top_categories'].empty:
+        elements.append(Paragraph("No expense data for this month.", styles["Normal"]))
     else:
-        data = [["Category", "Amount (Ksh)"]]
-        for cat, amt in top_categories.items():
-            data.append([cat, f"{amt:,.2f}"])
-        cat_table = Table(data, colWidths=[200, 200])
+        cat_data = [[cat, f"Ksh {amt:,.2f}"] for cat, amt in summary['top_categories'].items()]
+        cat_table = Table(cat_data, hAlign="LEFT")
         cat_table.setStyle(TableStyle([
             ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
             ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
@@ -131,25 +124,24 @@ def generate_pdf(df):
 
     elements.append(Spacer(1, 20))
 
-    # Add charts
-    elements.append(Paragraph("<b>Visual Insights</b>", styles['Heading2']))
-    if bar_chart:
-        elements.append(Image(bar_chart, width=400, height=250))
-        elements.append(Spacer(1, 12))
-    if pie_chart:
-        elements.append(Image(pie_chart, width=350, height=250))
+    # Add chart
+    elements.append(Paragraph("<b>Daily Income vs Expense Chart</b>", styles["Heading3"]))
+    elements.append(Image(chart_path, width=400, height=200))
 
-    # Footer
-    elements.append(Spacer(1, 20))
-    elements.append(Paragraph("<i>Generated automatically by Stephen Ongoma’s Finance Tracker</i>", styles['Normal']))
-
+    # Build PDF
     doc.build(elements)
-    print(f"✅ PDF Report successfully created: {report_path}")
+    print(f"✅ PDF report generated successfully: {filepath}")
 
 def main():
-    print("📄 Generating Monthly PDF Report...")
     df = load_data()
-    generate_pdf(df)
+
+    if df.empty:
+        print("⚠️ No data available. Please add transactions using tracker.py.")
+        return
+
+    summary, month_data = generate_monthly_summary(df)
+    chart_path = plot_monthly_chart(month_data, "temp_chart.png")
+    generate_pdf_report(summary, chart_path)
 
 if __name__ == "__main__":
     main()
