@@ -84,6 +84,24 @@ def add_transaction(transaction_type, category, amount):
     conn.commit()
     conn.close()
 
+def add_bulk_transactions(transactions):
+    """
+    Insert multiple transactions into the database using executemany.
+    Parameters:
+        transactions (list): A list of tuples, where each tuple is
+                             (type, category, amount, date).
+    """
+    conn = connect()
+    cursor = conn.cursor()
+
+    cursor.executemany("""
+        INSERT INTO transactions (type, category, amount, date)
+        VALUES (?, ?, ?, ?)
+    """, transactions)
+
+    conn.commit()
+    conn.close()
+
 
 def get_summary():
     """
@@ -134,12 +152,12 @@ def get_all_transactions():
     """
     Fetch all transactions, ordered by date descending.
     Returns:
-        List of tuples [(date, category, amount, type), ...]
+        List of tuples [(id, date, category, amount, type), ...]
     """
     conn = connect()
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT date, category, amount, type
+        SELECT id, date, category, amount, type
         FROM transactions
         ORDER BY date DESC
     """)
@@ -191,3 +209,40 @@ def check_monthly_budget():
         "percent_used": percent_used,
         "is_exceeded": total_expense >= budget
     }
+
+def get_transaction_by_id(transaction_id):
+    """
+    Fetch a single transaction by its ID to check for existence.
+    Returns:
+        A tuple with transaction data or None if not found.
+    """
+    conn = connect()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM transactions WHERE id = ?", (transaction_id,))
+    result = cursor.fetchone()
+    conn.close()
+    return result
+
+def delete_transaction_by_id(transaction_id):
+    """
+    Delete a transaction from the database using its ID.
+    """
+    conn = connect()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM transactions WHERE id = ?", (transaction_id,))
+    conn.commit()
+    conn.close()
+
+def update_transaction_by_id(transaction_id, new_type, new_category, new_amount):
+    """
+    Update the details of a specific transaction by its ID.
+    """
+    conn = connect()
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE transactions
+        SET type = ?, category = ?, amount = ?
+        WHERE id = ?
+    """, (new_type, new_category, new_amount, transaction_id))
+    conn.commit()
+    conn.close()

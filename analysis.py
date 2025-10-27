@@ -8,21 +8,21 @@
 # - Visualizations and CSV export
 # ---------------------------------------------------------------
 
-import sqlite3
 import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import datetime
 import os
+from database import connect, check_monthly_budget
 
-# Database path and export folder
-DB_PATH = "finance.db"
+# Export folder
 EXPORT_DIR = "data"
 os.makedirs(EXPORT_DIR, exist_ok=True)
 
 def load_data():
     """Load all transactions from the SQLite database into a pandas DataFrame."""
-    conn = sqlite3.connect(DB_PATH)
-    query = "SELECT date, category, description, amount, type FROM transactions"
+    conn = connect()  # Use the centralized connect function
+    # Query columns that exist in the database schema
+    query = "SELECT date, category, amount, type FROM transactions"
     df = pd.read_sql_query(query, conn)
     conn.close()
 
@@ -76,6 +76,16 @@ def generate_insights(df):
     print(f"🪙 Balance: Ksh {balance:,.2f}")
     print(f"📊 Average Daily Spending: Ksh {avg_daily_expense:,.2f}")
 
+    # 🧠 NEW: Budget Insights
+    budget_status = check_monthly_budget()
+    if budget_status:
+        print("\n🎯 Budget Status:")
+        print(f"   - Budget Set: Ksh {budget_status['budget']:,.2f}")
+        print(f"   - Spent: Ksh {budget_status['spent']:,.2f} ({budget_status['percent_used']:.1f}% used)")
+        if budget_status['is_exceeded']:
+            print(f"   - ⚠️  You are Ksh {abs(budget_status['remaining']):,.2f} over budget!")
+        else:
+            print(f"   - Remaining: Ksh {budget_status['remaining']:,.2f}")
     print("\n🏆 Top 3 Spending Categories:")
     for category, amount in top_categories.items():
         print(f"   - {category}: Ksh {amount:,.2f}")
@@ -139,6 +149,20 @@ def export_to_csv(df):
     df.to_csv(filepath, index=False)
     print(f"✅ Data exported successfully to: {filepath}")
 
+def export_current_month_to_csv(df):
+    """Export only the current month's transactions to a CSV file."""
+    now = datetime.now()
+    this_month_df = df[df['date'].dt.month == now.month]
+
+    if this_month_df.empty:
+        print(f"⚠️ No transactions found for {now.strftime('%B %Y')} to export.")
+        return
+
+    filename = f"transactions_{now.strftime('%Y-%m')}.csv"
+    filepath = os.path.join(EXPORT_DIR, filename)
+    this_month_df.to_csv(filepath, index=False)
+    print(f"✅ Current month's data exported successfully to: {filepath}")
+
 def main():
     print("📊 Loading data from database...")
     df = load_data()
@@ -155,9 +179,10 @@ def main():
         print("1. View monthly income vs expense chart")
         print("2. View expense distribution by category")
         print("3. Export all transactions to CSV")
-        print("4. Exit")
+        print("4. Export current month's transactions to CSV")
+        print("5. Exit")
 
-        choice = input("Enter choice (1-4): ").strip()
+        choice = input("Enter choice (1-5): ").strip()
 
         if choice == "1":
             plot_income_vs_expense(df)
@@ -165,11 +190,13 @@ def main():
             plot_expense_distribution(df)
         elif choice == "3":
             export_to_csv(df)
-        elif choice == "4":
+        elif choice == "4": # New option
+            export_current_month_to_csv(df)
+        elif choice == "5":
             print("👋 Exiting analysis module.")
             break
         else:
-            print("❌ Invalid choice. Try again.")
+            print("❌ Invalid choice. Please try again.")
 
 if __name__ == "__main__":
     main()
