@@ -1,0 +1,8 @@
+date,category,description,amount,type
+2025-10-27,helb,loans,8000.0,income
+2025-10-27,food,non,500.0,expense
+2025-10-27,rent,non,5000.0,expense
+2025-10-27,salary,non,35000.0,income
+2025-10-27,rent,non,5000.0,expense
+2025-10-27,food,non,10000.0,expense
+2025-10-27,utilities,"water, electricity, internet, gas",6050.0,expense

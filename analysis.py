@@ -1,20 +1,25 @@
 # analysis.py
 # Author: Stephen Ongoma
-# Finance Tracker v2.2 - Data Analysis and Visualization Module
+# Finance Tracker v2.3 - Data Analysis and Export Module
 # ---------------------------------------------------------------
-# This script loads data from finance.db and provides visual insights:
-# - Income vs Expense chart
-# - Spending distribution by category
-# - Basic summary metrics
+# Features:
+# - Load and summarize financial data
+# - Visualize income vs expense and spending by category
+# - Export data to CSV for external analysis
 # ---------------------------------------------------------------
 
 import sqlite3
 import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import datetime
+import os
 
-# Database path (update if moved to subfolder later)
+# Database path
 DB_PATH = "finance.db"
+EXPORT_DIR = "data"
+
+# Ensure export directory exists
+os.makedirs(EXPORT_DIR, exist_ok=True)
 
 def load_data():
     """Load all transactions from the SQLite database into a pandas DataFrame."""
@@ -23,7 +28,6 @@ def load_data():
     df = pd.read_sql_query(query, conn)
     conn.close()
 
-    # Convert date column to datetime type
     df['date'] = pd.to_datetime(df['date'], errors='coerce')
     return df
 
@@ -71,6 +75,19 @@ def plot_expense_distribution(df):
     plt.tight_layout()
     plt.show()
 
+def export_to_csv(df):
+    """Export all transactions to a CSV file in the /data directory."""
+    if df.empty:
+        print("⚠️ No data available to export.")
+        return
+
+    # Create a timestamped filename
+    filename = f"transactions_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
+    filepath = os.path.join(EXPORT_DIR, filename)
+
+    df.to_csv(filepath, index=False)
+    print(f"✅ Data exported successfully to: {filepath}")
+
 def main():
     print("📊 Loading data from database...")
     df = load_data()
@@ -85,15 +102,18 @@ def main():
         print("\n--- Analysis Menu ---")
         print("1. View monthly income vs expense chart")
         print("2. View expense distribution by category")
-        print("3. Exit")
+        print("3. Export all transactions to CSV")
+        print("4. Exit")
 
-        choice = input("Enter choice (1-3): ").strip()
+        choice = input("Enter choice (1-4): ").strip()
 
         if choice == "1":
             plot_income_vs_expense(df)
         elif choice == "2":
             plot_expense_distribution(df)
         elif choice == "3":
+            export_to_csv(df)
+        elif choice == "4":
             print("👋 Exiting analysis module.")
             break
         else:
