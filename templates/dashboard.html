@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Finance Tracker{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+    <!-- Summary Cards -->
+    <div class="summary-cards">
+        <div class="card card-primary">
+            <h3>Total Income</h3>
+            <p class="amount income">Ksh {{ "%.2f"|format(total_income) }}</p>
+        </div>
+        <div class="card card-danger">
+            <h3>Total Expenses</h3>
+            <p class="amount expense">Ksh {{ "%.2f"|format(total_expense) }}</p>
+        </div>
+        <div class="card card-success">
+            <h3>Balance</h3>
+            <p class="amount balance">Ksh {{ "%.2f"|format(balance) }}</p>
+        </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="charts-section" style="margin-top: 1.5rem; display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+        <div class="card">
+            <h3>Monthly Income vs Expense</h3>
+            <canvas id="monthlyChart" aria-label="Monthly income vs expense" role="img"></canvas>
+        </div>
+        <div class="card">
+            <h3>Expense Distribution (Current Month)</h3>
+            <canvas id="categoryChart" aria-label="Expense distribution by category" role="img"></canvas>
+        </div>
+    </div>
+
+    <!-- Budget Status Section -->
+    {% if budget_status %}
+    <div class="budget-section">
+        <h2>📊 Budget Status</h2>
+        <div class="budget-info">
+            <div class="budget-item">
+                <p><strong>Monthly Budget:</strong> Ksh {{ "%.2f"|format(budget_status.budget) }}</p>
+                <p><strong>Spent:</strong> Ksh {{ "%.2f"|format(budget_status.spent) }}</p>
+                <p><strong>Remaining:</strong> 
+                    <span class="{% if budget_status.is_exceeded %}exceeded{% else %}available{% endif %}">
+                        Ksh {{ "%.2f"|format(budget_status.remaining) }}
+                    </span>
+                </p>
+            </div>
+            <div class="progress-bar">
+                <div class="progress" style="width: {{ budget_status.percent_used }}%"></div>
+            </div>
+            <p class="percent-used">{{ "%.1f"|format(budget_status.percent_used) }}% of budget used</p>
+            {% if budget_status.is_exceeded %}
+                <div class="alert alert-warning">
+                    ⚠️ You have exceeded your budget by Ksh {{ "%.2f"|format(abs(budget_status.remaining)) }}
+                </div>
+            {% endif %}
+        </div>
+    </div>
+    {% else %}
+    <div class="budget-section">
+        <p>💡 No budget set for this month. <a href="{{ url_for('budget') }}">Set a budget</a></p>
+    </div>
+    {% endif %}
+
+    <!-- Quick Actions -->
+    <div class="quick-actions">
+        <h2>Quick Actions</h2>
+        <div class="action-buttons">
+            <a href="{{ url_for('add_page') }}" class="btn btn-primary">➕ Add Transaction</a>
+            <a href="{{ url_for('transactions') }}" class="btn btn-secondary">📋 View All</a>
+            <a href="{{ url_for('budget') }}" class="btn btn-secondary">🎯 Manage Budget</a>
+        </div>
+    </div>
+
+    <!-- Expenses by Category -->
+    {% if expenses_by_category %}
+    <div class="expenses-section">
+        <h2>📂 Expenses by Category</h2>
+        <div class="category-list">
+            {% for category, amount in expenses_by_category %}
+            <div class="category-item">
+                <span class="category-name">{{ category }}</span>
+                <span class="category-amount">Ksh {{ "%.2f"|format(amount) }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Recent Transactions -->
+    {% if recent_transactions %}
+    <div class="recent-transactions">
+        <h2>📅 Recent Transactions</h2>
+        <div class="transaction-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Category</th>
+                        <th>Type</th>
+                        <th>Amount (Ksh)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for trans_id, date, category, amount, trans_type in recent_transactions %}
+                    <tr class="{% if trans_type == 'income' %}income-row{% else %}expense-row{% endif %}">
+                        <td>{{ date.split(' ')[0] }}</td>
+                        <td>{{ category }}</td>
+                        <td>{{ trans_type.capitalize() }}</td>
+                        <td>Ksh {{ "%.2f"|format(amount) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="view-all">
+            <a href="{{ url_for('transactions') }}" class="link">View all transactions →</a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+{% endblock %}

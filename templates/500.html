@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block title %}Server Error - Finance Tracker{% endblock %}
+
+{% block content %}
+<div class="error-page" style="text-align: center; padding: 3rem;">
+    <h1 style="font-size: 4rem; color: #EF4444;">500</h1>
+    <h2>Server Error</h2>
+    <p style="color: #6B7280; margin: 1rem 0;">Something went wrong on the server. Please try again later.</p>
+    <a href="{{ url_for('index') }}" class="btn btn-primary" style="margin-top: 1rem;">Return to Dashboard</a>
+</div>
+{% endblock %}

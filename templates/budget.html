@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}Budget Management - Finance Tracker{% endblock %}
+
+{% block content %}
+<div class="budget-page">
+    <h1>Budget Management</h1>
+
+    {% if budget_status %}
+    <div class="current-budget">
+        <h2>Current Month Budget</h2>
+        <div class="budget-details">
+            <div class="budget-item">
+                <h3>Monthly Budget</h3>
+                <p class="amount">Ksh {{ "%.2f"|format(budget_status.budget) }}</p>
+            </div>
+            <div class="budget-item">
+                <h3>Amount Spent</h3>
+                <p class="amount">Ksh {{ "%.2f"|format(budget_status.spent) }}</p>
+            </div>
+            <div class="budget-item">
+                <h3>Remaining</h3>
+                <p class="amount {% if budget_status.is_exceeded %}exceeded{% else %}available{% endif %}">
+                    Ksh {{ "%.2f"|format(budget_status.remaining) }}
+                </p>
+            </div>
+        </div>
+        
+        <div class="progress-section">
+            <div class="progress-bar">
+                <div class="progress" style="width: {{ [budget_status.percent_used, 100]|min }}%"></div>
+            </div>
+            <p class="percent-text">{{ "%.1f"|format(budget_status.percent_used) }}% of budget used</p>
+        </div>
+
+        {% if budget_status.is_exceeded %}
+        <div class="alert alert-danger">
+            ⚠️ You have exceeded your budget by Ksh {{ "%.2f"|format(abs(budget_status.remaining)) }}
+        </div>
+        {% endif %}
+    </div>
+    {% else %}
+    <div class="no-budget">
+        <p>💡 No budget has been set for this month yet.</p>
+    </div>
+    {% endif %}
+
+    <div class="set-budget-section">
+        <h2>Set Monthly Budget</h2>
+        <form id="budgetForm" class="budget-form">
+            <div class="form-group">
+                <label for="budgetAmount">Budget Amount (Ksh) *</label>
+                <input type="number" id="budgetAmount" name="amount" placeholder="Enter your budget" step="0.01" min="0" required>
+            </div>
+            <button type="submit" class="btn btn-primary">💾 Save Budget</button>
+        </form>
+        <div id="budgetMessage" class="form-message" style="display: none;"></div>
+    </div>
+</div>
+
+<script>
+document.getElementById('budgetForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const amount = document.getElementById('budgetAmount').value;
+    
+    try {
+        const response = await fetch('{{ url_for("api_set_budget") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ amount })
+        });
+
+        const data = await response.json();
+        const messageDiv = document.getElementById('budgetMessage');
+
+        if (data.success) {
+            messageDiv.className = 'form-message success';
+            messageDiv.textContent = '✅ ' + data.message;
+            messageDiv.style.display = 'block';
+            document.getElementById('budgetForm').reset();
+            
+            setTimeout(() => {
+                location.reload();
+            }, 1500);
+        } else {
+            messageDiv.className = 'form-message error';
+            messageDiv.textContent = '❌ ' + data.message;
+            messageDiv.style.display = 'block';
+        }
+    } catch (error) {
+        document.getElementById('budgetMessage').className = 'form-message error';
+        document.getElementById('budgetMessage').textContent = '❌ Error: ' + error.message;
+        document.getElementById('budgetMessage').style.display = 'block';
+    }
+});
+</script>
+{% endblock %}

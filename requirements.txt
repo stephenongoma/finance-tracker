@@ -1,6 +1,7 @@
 # Personal Finance Tracker Requirements
 # Built with Python standard libraries + optional data visualization tools
 
+flask>=2.0
 matplotlib>=3.0
 pandas>=1.0
 reportlab>=3.6
