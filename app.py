@@ -250,6 +250,105 @@ def budget():
     return render_template('budget.html', budget_status=budget_status)
 
 
+@app.route('/csv')
+def csv_page():
+    """CSV import/export page."""
+    return render_template('csv.html')
+
+
+@app.route('/api/export-csv')
+def api_export_csv():
+    """Export all transactions to CSV format."""
+    try:
+        import csv
+        from io import StringIO
+        from flask import make_response
+        
+        transactions = get_all_transactions()
+        output = StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['ID', 'Date', 'Category', 'Amount', 'Type'])
+        for trans_id, date, category, amount, trans_type in transactions:
+            writer.writerow([trans_id, date, category, amount, trans_type])
+        
+        response = make_response(output.getvalue())
+        response.headers['Content-Disposition'] = f'attachment; filename=transactions_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.csv'
+        response.headers['Content-Type'] = 'text/csv'
+        return response
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/import-csv', methods=['POST'])
+def api_import_csv():
+    """Import transactions from uploaded CSV file."""
+    try:
+        import csv
+        from io import TextIOWrapper
+        
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'message': 'No file part'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'success': False, 'message': 'No file selected'}), 400
+        
+        if not file.filename.endswith('.csv'):
+            return jsonify({'success': False, 'message': 'File must be a CSV'}), 400
+        
+        stream = TextIOWrapper(file.stream, encoding='utf-8')
+        reader = csv.DictReader(stream)
+        
+        transactions_to_add = []
+        skipped = 0
+        
+        for row_num, row in enumerate(reader, start=2):
+            try:
+                trans_type = row.get('type', '').lower().strip()
+                category = row.get('category', '').strip()
+                amount = float(row.get('amount', 0))
+                date_str = row.get('date', '').strip()
+                
+                if trans_type not in ['income', 'expense']:
+                    skipped += 1
+                    continue
+                
+                if not category or amount <= 0:
+                    skipped += 1
+                    continue
+                
+                if date_str:
+                    try:
+                        parsed_date = datetime.strptime(date_str, '%Y-%m-%d %H:%M:%S')
+                        date_str = parsed_date.strftime('%Y-%m-%d %H:%M:%S')
+                    except ValueError:
+                        try:
+                            parsed_date = datetime.strptime(date_str, '%Y-%m-%d')
+                            date_str = parsed_date.strftime('%Y-%m-%d %H:%M:%S')
+                        except ValueError:
+                            date_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                else:
+                    date_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                
+                transactions_to_add.append((trans_type, category, amount, date_str))
+            except Exception as e:
+                skipped += 1
+                continue
+        
+        if transactions_to_add:
+            from database import add_bulk_transactions
+            add_bulk_transactions(transactions_to_add)
+            message = f'Successfully imported {len(transactions_to_add)} transactions.'
+            if skipped > 0:
+                message += f' ({skipped} rows skipped due to errors).'
+            return jsonify({'success': True, 'message': message, 'imported': len(transactions_to_add)})
+        else:
+            return jsonify({'success': False, 'message': f'No valid transactions found to import. {skipped} rows skipped.'}), 400
+    
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Error processing CSV: {str(e)}'}), 500
+
+
 @app.errorhandler(404)
 def page_not_found(e):
     """Handle 404 errors."""
